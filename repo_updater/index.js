@@ -2,7 +2,6 @@ const {Octokit} = require('@octokit/rest');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const prettier = require('prettier');
 
 String.prototype.leftTrim = function () {
     return this.replace(/^\s+/, "");
@@ -73,37 +72,52 @@ function deleteFile(repo, filepath) {
     }).catch(() => true);
 }
 
-function updateReadme(repo, callback) {
+function updateFile(repo, filepath, callback, message = null) {
+    let newContent = false;
+    let sha = null;
+
     return octokit.repos.getContent({
         owner: repo.owner.login,
         repo: repo.name,
-        path: 'README.md',
+        path: filepath,
         ref: repo.default_branch,
-    }).then(response => {
-        let readme = Buffer.from(response.data.content, 'base64').toString();
-        let newReadme = callback(readme).trim() + '\n';
+    })
+        .then(response => {
+            let content = Buffer.from(response.data.content, 'base64').toString();
+            newContent = Buffer.from(callback(content)).toString();
+            sha = response.data.sha;
 
-        fs.writeFileSync(path.join(__dirname, 'readmes', repo.owner.login + '-' + repo.name + '.md'), newReadme);
-
-        if (readme === newReadme) {
-            return;
-        }
-
-        console.log(`update README.md of ${repo.owner.login}/${repo.name}`);
-        return octokit.repos.createOrUpdateFileContents({
-            owner: repo.owner.login,
-            repo: repo.name,
-            path: response.data.path,
-            message: 'Update README.md',
-            content: Buffer.from(newReadme).toString('base64'),
-            sha: response.data.sha,
-            branch: repo.default_branch,
-            author: {
-                name: 'Gummibeer',
-                email: '6187884+Gummibeer@users.noreply.github.com',
+            if (!newContent || content === newContent) {
+                newContent = false;
             }
+        })
+        .catch(() => {
+            newContent = callback('');
+        })
+        .finally(async () => {
+            if (!newContent) {
+                return;
+            }
+
+            console.log(`create or update file: ${repo.owner.login}/${repo.name}@${filepath}`);
+            await octokit.repos.createOrUpdateFileContents({
+                owner: repo.owner.login,
+                repo: repo.name,
+                path: filepath,
+                message: message ?? `Update ${filepath}`,
+                content: Buffer.from(newContent).toString('base64'),
+                branch: repo.default_branch,
+                sha: sha,
+                author: {
+                    name: 'Gummibeer',
+                    email: '6187884+Gummibeer@users.noreply.github.com',
+                }
+            }).catch(console.error);
         });
-    }).catch(console.error);
+}
+
+function updateReadme(repo, callback) {
+    return updateFile(repo, 'README.md', readme => callback(readme).trim() + '\n');
 }
 
 function updateTreeware(repo) {
@@ -126,39 +140,6 @@ async function updateContributing(repo) {
     });
 }
 
-function normalizeReadme(repo) {
-    return octokit.repos.getContent({
-        owner: repo.owner.login,
-        repo: repo.name,
-        path: 'README.md',
-        ref: repo.default_branch,
-    }).then(response => {
-        let readme = Buffer.from(response.data.content, 'base64').toString();
-        let newReadme = prettier.format(readme, {parser: 'markdown'});
-
-        fs.writeFileSync(path.join(__dirname, 'readmes', repo.owner.login + '-' + repo.name + '.md'), newReadme);
-
-        if (readme === newReadme) {
-            return;
-        }
-
-        console.log(`normalize README.md of ${repo.owner.login}/${repo.name}`);
-        return octokit.repos.createOrUpdateFileContents({
-            owner: repo.owner.login,
-            repo: repo.name,
-            path: response.data.path,
-            message: 'normalize README.md',
-            content: Buffer.from(newReadme).toString('base64'),
-            sha: response.data.sha,
-            branch: repo.default_branch,
-            author: {
-                name: 'Gummibeer',
-                email: '6187884+Gummibeer@users.noreply.github.com',
-            }
-        });
-    }).catch(console.error);
-}
-
 repos().then(repos => {
     return repos.forEach(async repo => {
         // delete all inherited files
@@ -168,9 +149,13 @@ repos().then(repos => {
         await deleteFile(repo, 'SECURITY.md');
         await deleteFile(repo, 'SUPPORT.md');
 
-        // update treeware section
+        // copy shared github actions
+        fs.readdirSync(path.resolve(__dirname, '..', 'workflows', 'shared')).forEach(async filename => {
+            await updateFile(repo, `.github/workflows/${filename}`, () => fs.readFileSync(path.resolve(__dirname, '..', 'workflows', 'shared', filename)));
+        });
+
+        // update readme sections
         await updateTreeware(repo);
         await updateContributing(repo);
-        await normalizeReadme(repo);
     });
 });
