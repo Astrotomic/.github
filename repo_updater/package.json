@@ -1,0 +1,11 @@
+{
+  "name": "github-readme-updater",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/rest": "^17.9.2",
+    "dotenv": "^8.2.0",
+    "prettier": "^2.0.5"
+  }
+}
