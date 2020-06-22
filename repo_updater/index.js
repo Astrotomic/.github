@@ -38,7 +38,6 @@ function repos(page = 1) {
                 .filter(repo => !repo.archived)
                 .filter(repo => repo.name !== '.github')
                 .filter(repo => repo.name !== 'art')
-                .filter(repo => repo.name !== 'astrotomic.info')
             ;
 
             if (response.data.length === 100) {
