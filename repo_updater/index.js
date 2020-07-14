@@ -139,8 +139,42 @@ async function updateContributing(repo) {
     });
 }
 
+async function updateLabels(repo)
+{
+    const labels = {
+        'stale': 'ffffff',
+        'bug': 'FC8181',
+        'documentation': 'A3BFFA',
+        'duplicate': 'E2E8F0',
+        'enhancement': 'B2F5EA',
+        'good first issue': 'D6BCFA',
+        'help wanted': '9AE6B4',
+        'invalid': 'E2E8F0',
+        'next major release': 'FBD38D',
+        'next release': 'FAF089',
+        'question': 'FBB6CE',
+        'wontfix': 'ffffff',
+        'dependencies': '0366d6',
+        'hacktoberfest': 'ffffff',
+    };
+
+    for(let name in labels) {
+        let data = {
+            owner: repo.owner.login,
+            repo: repo.name,
+            name: name,
+            color: labels[name],
+            description: '',
+        };
+
+        await octokit.issues.updateLabel(data).catch(() => octokit.issues.createLabel(data));
+    }
+}
+
 repos().then(repos => {
     return repos.forEach(async repo => {
+        await updateLabels(repo);
+
         // delete all inherited files
         await deleteFile(repo, '.github/FUNDING.yml');
         await deleteFile(repo, 'CODE_OF_CONDUCT.md');
